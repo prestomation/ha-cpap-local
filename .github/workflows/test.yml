@@ -24,8 +24,8 @@ jobs:
       - name: Install dependencies
         run: |
           pip install pytest pytest-homeassistant-custom-component
-          # TODO: pin to pycpap>=0.2.0 on PyPI once released
-          pip install "git+https://github.com/prestomation/pycpap.git@fix/review-findings"
+          # Pinned to commit hash for stability; update to PyPI release once pycpap>=0.2.0 is published
+          pip install "git+https://github.com/prestomation/pycpap.git@a97502cd36c3e4dd818c7dce6044efa501aedc1d"
 
       - name: Run tests
         run: |

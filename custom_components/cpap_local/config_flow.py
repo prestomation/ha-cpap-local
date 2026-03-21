@@ -62,7 +62,11 @@ class CPAPLocalConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
     def __init__(self) -> None:
         self._fetch_method: str | None = None
-        self._connection_warning_shown: bool = False
+        # Track which URL the "cannot connect" warning was already shown for.
+        # Using the URL (not just a bool) ensures that if the user changes the
+        # URL after the first failure, the new URL is still validated rather than
+        # being silently accepted because a warning was shown for a different URL.
+        self._warned_url: str | None = None
 
     async def async_step_user(self, user_input: dict | None = None) -> FlowResult:
         """Step 1: Choose fetch method."""
@@ -94,12 +98,15 @@ class CPAPLocalConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             except Exception:
                 connection_ok = False
 
-            if not connection_ok and not self._connection_warning_shown:
-                # First failure: warn the user but allow them to proceed by submitting again
-                self._connection_warning_shown = True
+            if not connection_ok and self._warned_url != url:
+                # First failure for this URL: warn and allow user to proceed by
+                # re-submitting the same URL.  If the user changes the URL we
+                # reset and re-validate the new one.
+                self._warned_url = url
                 errors["base"] = "cannot_connect"
             else:
-                # Either connected OK, or user acknowledged the warning and resubmitted
+                # Either connected OK, or user re-submitted the same URL after
+                # acknowledging the cannot_connect warning.
                 return self.async_create_entry(
                     title=f"CPAP ({url})",
                     data={
