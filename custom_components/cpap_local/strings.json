@@ -1,0 +1,43 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "CPAP Local Setup",
+        "description": "Choose how to connect to your CPAP device's SD card.",
+        "data": {
+          "fetch_method": "Connection Method"
+        }
+      },
+      "http": {
+        "title": "HTTP Connection",
+        "description": "Connect via a WiFi SD card adapter (e.g. EZ Share). Your CPAP device must be off and the adapter powered up.",
+        "data": {
+          "http_url": "Adapter URL",
+          "sync_hour": "Daily Sync Hour (0-23)"
+        }
+      },
+      "local": {
+        "title": "Local Path",
+        "description": "Connect to a locally mounted SD card or network share.",
+        "data": {
+          "local_path": "SD Card Path",
+          "sync_hour": "Daily Sync Hour (0-23)"
+        }
+      }
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "CPAP Local Options",
+        "data": {
+          "ahi_threshold": "AHI Alert Threshold (events/hour)",
+          "min_usage_hours": "Minimum Usage Hours (compliance)",
+          "raw_sync_enabled": "Enable Raw DATALOG Sync",
+          "raw_sync_path": "Raw Sync Destination Path",
+          "raw_sync_scope": "Raw Sync Scope"
+        }
+      }
+    }
+  }
+}

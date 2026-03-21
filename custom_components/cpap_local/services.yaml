@@ -1,0 +1,4 @@
+sync_now:
+  name: Sync Now
+  description: Immediately fetch the latest CPAP data from the device, bypassing the scheduled sync time.
+  fields: {}
