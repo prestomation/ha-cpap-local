@@ -10,6 +10,7 @@
 - **Low leak coaching** — Notify if mask leak 95th has trended up over the last 7 days.
 
 ## Device Support
+- **AirMini Bluetooth support** — ResMed's travel CPAP has no SD card. Data lives on-device, synced via Bluetooth Classic SPP. Once `pycpap` implements `AirMiniFetcher`, this integration would add a "Bluetooth" fetch method to the config flow. The AirMini shows a 4-digit PIN during pairing — the config flow would need a pairing step to capture it. See `pycpap/docs/airmini-protocol.md` for full protocol research notes.
 - **AirSense 11 native features** — AirSense 11 has Bluetooth for direct data sync; explore if pycpap can leverage this.
 - **Philips DreamStation support** — Once pycpap supports Respironics, expose the same sensor set.
 - **F&P Icon support** — Same pattern if pycpap adds support.
