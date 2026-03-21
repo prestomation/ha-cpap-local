@@ -1,10 +1,17 @@
 """Config flow for CPAP Local integration."""
 from __future__ import annotations
 
+import logging
+from pathlib import Path
+
+import aiohttp
 import voluptuous as vol
 from homeassistant import config_entries
 from homeassistant.core import callback
 from homeassistant.data_entry_flow import FlowResult
+from homeassistant.helpers.aiohttp_client import async_get_clientsession
+
+_LOGGER = logging.getLogger(__name__)
 
 from .const import (
     CONF_AHI_THRESHOLD,
@@ -58,6 +65,11 @@ class CPAPLocalConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
     def __init__(self) -> None:
         self._fetch_method: str | None = None
+        # Track which URL the "cannot connect" warning was already shown for.
+        # Using the URL (not just a bool) ensures that if the user changes the
+        # URL after the first failure, the new URL is still validated rather than
+        # being silently accepted because a warning was shown for a different URL.
+        self._warned_url: str | None = None
 
     async def async_step_user(self, user_input: dict | None = None) -> FlowResult:
         """Step 1: Choose fetch method."""
@@ -78,14 +90,35 @@ class CPAPLocalConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
         if user_input is not None:
             url = user_input[CONF_HTTP_URL].rstrip("/")
-            return self.async_create_entry(
-                title=f"CPAP ({url})",
-                data={
-                    CONF_FETCH_METHOD: FETCH_METHOD_HTTP,
-                    CONF_HTTP_URL: url,
-                    CONF_SYNC_HOUR: user_input.get(CONF_SYNC_HOUR, DEFAULT_SCAN_INTERVAL_HOUR),
-                },
-            )
+            connection_ok = False
+            try:
+                session = async_get_clientsession(self.hass)
+                async with session.get(
+                    f"{url}/dir?dir=A:",
+                    timeout=aiohttp.ClientTimeout(total=5),
+                ) as resp:
+                    connection_ok = resp.status < 400
+            except Exception as exc:  # noqa: BLE001
+                _LOGGER.debug("CPAP connection check failed for %s: %s", url, exc)
+                connection_ok = False
+
+            if not connection_ok and self._warned_url != url:
+                # First failure for this URL: warn and allow user to proceed by
+                # re-submitting the same URL.  If the user changes the URL we
+                # reset and re-validate the new one.
+                self._warned_url = url
+                errors["base"] = "cannot_connect"
+            else:
+                # Either connected OK, or user re-submitted the same URL after
+                # acknowledging the cannot_connect warning.
+                return self.async_create_entry(
+                    title=f"CPAP ({url})",
+                    data={
+                        CONF_FETCH_METHOD: FETCH_METHOD_HTTP,
+                        CONF_HTTP_URL: url,
+                        CONF_SYNC_HOUR: user_input.get(CONF_SYNC_HOUR, DEFAULT_SCAN_INTERVAL_HOUR),
+                    },
+                )
 
         return self.async_show_form(
             step_id="http",
@@ -98,15 +131,18 @@ class CPAPLocalConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         errors: dict[str, str] = {}
 
         if user_input is not None:
-            path = user_input[CONF_LOCAL_PATH]
-            return self.async_create_entry(
-                title=f"CPAP (local: {path})",
-                data={
-                    CONF_FETCH_METHOD: FETCH_METHOD_LOCAL,
-                    CONF_LOCAL_PATH: path,
-                    CONF_SYNC_HOUR: user_input.get(CONF_SYNC_HOUR, DEFAULT_SCAN_INTERVAL_HOUR),
-                },
-            )
+            path = Path(user_input[CONF_LOCAL_PATH])
+            if not path.exists() or not path.is_dir():
+                errors[CONF_LOCAL_PATH] = "invalid_path"
+            else:
+                return self.async_create_entry(
+                    title=f"CPAP (local: {path})",
+                    data={
+                        CONF_FETCH_METHOD: FETCH_METHOD_LOCAL,
+                        CONF_LOCAL_PATH: str(path),
+                        CONF_SYNC_HOUR: user_input.get(CONF_SYNC_HOUR, DEFAULT_SCAN_INTERVAL_HOUR),
+                    },
+                )
 
         return self.async_show_form(
             step_id="local",

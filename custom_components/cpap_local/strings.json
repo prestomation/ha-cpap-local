@@ -24,6 +24,11 @@
           "sync_hour": "Daily Sync Hour (0-23)"
         }
       }
+    },
+    "error": {
+      "cannot_connect": "Could not reach the device. Make sure your CPAP is off and your device is connected to its WiFi network. Submit again to save anyway.",
+      "invalid_path": "The specified path does not exist or is not a directory.",
+      "unknown": "Unexpected error. See Home Assistant logs for details."
     }
   },
   "options": {

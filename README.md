@@ -1,13 +1,16 @@
 # CPAP Local — Home Assistant Integration
 
-A Home Assistant custom integration that fetches ResMed CPAP therapy data from your device's SD card and exposes it as sensors. HACS-compatible.
+A Home Assistant custom integration that fetches ResMed CPAP therapy data and exposes it as sensors. HACS-compatible.
 
-Supports ResMed AirSense 10, AirSense 11, and S9 series devices. Data can be fetched via a WiFi SD card adapter (HTTP) or from a locally mounted SD card.
+This integration is a thin wrapper around [pycpap](https://github.com/prestomation/pycpap) — a standalone Python library that handles all device communication and data parsing. If you want to use CPAP data outside of Home Assistant (scripts, dashboards, data analysis), use pycpap directly.
 
-> **WiFi Note:** This integration does not manage your WiFi SD card adapter or network routing. That setup is your responsibility. Common approaches:
-> - [EZ Share WiFi SD Card](https://www.amazon.com/s?k=ez+share+wifi+sd) — plug-and-play adapter that creates its own WiFi network
-> - OpenWRT router routing — route traffic from the EZ Share AP to your Home Assistant host
-> - Raspberry Pi bridge — connect to the EZ Share AP and bridge to your home network
+## Supported Devices
+
+### SD Card devices (AirSense 10, AirSense 11, S9)
+Data is fetched from the SD card via a WiFi adapter or direct mount. The CPAP machine must have an SD card inserted.
+
+### AirMini (Bluetooth — planned)
+The AirMini stores **365 days** of therapy data on-device, accessible over Bluetooth Classic SPP. No SD card or WiFi adapter required. You can pull a whole trip's data retroactively when you get home — no mobile app needed. See [pycpap/docs/airmini-protocol.md](https://github.com/prestomation/pycpap/blob/main/docs/airmini-protocol.md) for protocol details.
 
 ---
 
@@ -31,21 +34,23 @@ Supports ResMed AirSense 10, AirSense 11, and S9 series devices. Data can be fet
 
 | Method | When to use |
 |---|---|
-| **HTTP (WiFi SD Card)** | Your CPAP is off, EZ Share adapter is on your home network |
-| **Local Path** | SD card is mounted on the HA host (card reader or network share) |
+| **HTTP (WiFi SD Card)** | EZ Share or similar WiFi adapter on your network |
+| **Local Path** | SD card mounted directly on the HA host |
 
 ### Step 2a: HTTP Setup
-- **Adapter URL** — default `http://192.168.4.1` (EZ Share default IP)
-- **Daily Sync Hour** — hour of day to fetch data (default 10 = 10:00 AM)
+- **Adapter URL** — default `http://192.168.4.1` (EZ Share default). Change if using a bridge or different adapter.
+- **Daily Sync Hour** — time to fetch data each day (default 10 = 10:00 AM local time)
+
+> The integration does not manage your WiFi or network routing. The URL just needs to be reachable at sync time. Common approaches: direct connection to the EZ Share AP, OpenWRT routing, or a Raspberry Pi bridge.
 
 ### Step 2b: Local Path Setup
-- **SD Card Path** — full path to the SD card mount point (e.g. `/media/resmed_sd`)
+- **SD Card Path** — path to the SD card mount point (e.g. `/media/resmed_sd`)
 - **Daily Sync Hour** — same as above
 
-### Options (after setup)
-- **AHI Threshold** — AHI level that triggers `binary_sensor.cpap_ahi_elevated` (default 10)
-- **Minimum Usage Hours** — hours of use that defines compliance (default 4h, per insurance standards)
-- **Raw DATALOG Sync** — optionally archive high-res per-breath DATALOG files to a local path
+### Options (editable after setup)
+- **AHI Threshold** — triggers `binary_sensor.cpap_ahi_elevated` (default 10 events/hr)
+- **Minimum Usage Hours** — defines compliance (default 4h, per insurance standard)
+- **Raw DATALOG Sync** — optionally archive high-res DATALOG files to a local path for use with OSCAR or SleepHQ
 
 ---
 
@@ -59,12 +64,12 @@ Supports ResMed AirSense 10, AirSense 11, and S9 series devices. Data can be fet
 | `sensor.cpap_usage_hours` | h | Nightly usage duration |
 | `sensor.cpap_mask_leak` | L/min | Median mask leak |
 | `sensor.cpap_mask_leak_95` | L/min | 95th percentile mask leak |
-| `sensor.cpap_pressure_median` | cmH2O | Median therapy pressure |
-| `sensor.cpap_pressure_95` | cmH2O | 95th percentile pressure |
+| `sensor.cpap_pressure_median` | cmH₂O | Median therapy pressure |
+| `sensor.cpap_pressure_95` | cmH₂O | 95th percentile pressure |
 | `sensor.cpap_session_start` | timestamp | Mask-on time |
 | `sensor.cpap_session_end` | timestamp | Mask-off time |
 | `sensor.cpap_mode` | — | Therapy mode (CPAP, APAP, AutoSet, etc.) |
-| `sensor.cpap_last_sync` | timestamp | Last successful data sync |
+| `sensor.cpap_last_sync` | timestamp | Last time new data was fetched |
 
 ### Binary Sensors
 
@@ -79,41 +84,56 @@ Supports ResMed AirSense 10, AirSense 11, and S9 series devices. Data can be fet
 ## Services
 
 ### `cpap_local.sync_now`
-Immediately fetch the latest CPAP data, bypassing the scheduled sync time.
+Immediately fetch the latest data, bypassing the scheduled sync time. Optionally target a specific device if you have multiple config entries.
 
 ```yaml
 service: cpap_local.sync_now
+# data:
+#   entry_id: "abc123..."  # optional, syncs all if omitted
 ```
 
 ---
 
-## Automation Example
+## Automation Examples
 
 ```yaml
-# Notify if AHI was elevated last night
+# Morning notification with last night's stats
 automation:
-  - alias: "CPAP AHI Alert"
+  - alias: "CPAP Morning Summary"
     trigger:
-      - platform: state
-        entity_id: binary_sensor.cpap_ahi_elevated
-        to: "on"
+      - platform: time
+        at: "08:00:00"
     action:
       - service: notify.mobile_app_phone
         data:
-          title: "CPAP Alert"
+          title: "Last Night's CPAP"
           message: >
-            Last night's AHI was {{ states('sensor.cpap_ahi') }} events/hour.
-            Consider checking your mask fit.
+            AHI: {{ states('sensor.cpap_ahi') }} · 
+            {{ (states('sensor.cpap_usage_hours') | float) | round(1) }}h · 
+            Leak: {{ states('sensor.cpap_mask_leak_95') }} L/min
+
+# Alert if AHI was high
+automation:
+  - alias: "CPAP AHI Alert"
+    trigger:
+      - platform: numeric_state
+        entity_id: sensor.cpap_ahi
+        above: 10
+    action:
+      - service: notify.mobile_app_phone
+        data:
+          title: "High AHI Last Night"
+          message: "AHI was {{ states('sensor.cpap_ahi') }} events/hour. Check mask fit."
 ```
 
 ---
 
 ## Requirements
 
-- Home Assistant 2023.6+
-- ResMed AirSense 10, AirSense 11, or S9 series device with SD card
-- WiFi SD card adapter (e.g. EZ Share) or direct SD card access
+- Home Assistant 2023.3+
+- [pycpap](https://github.com/prestomation/pycpap) (installed automatically)
+- ResMed AirSense 10, AirSense 11, or S9 — with SD card inserted and a WiFi adapter or USB card reader
 
-## Dependencies
+## License
 
-This integration uses [pycpap](https://github.com/prestomation/pycpap) for SD card data parsing.
+MIT

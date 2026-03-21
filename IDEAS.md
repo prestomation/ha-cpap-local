@@ -10,6 +10,7 @@
 - **Low leak coaching** — Notify if mask leak 95th has trended up over the last 7 days.
 
 ## Device Support
+- **AirMini Bluetooth support** — Once `pycpap` implements `AirMiniFetcher`, add a "Bluetooth" fetch method to the config flow with a pairing step for the 4-digit PIN. See [pycpap docs/airmini-protocol.md](https://github.com/prestomation/pycpap/blob/main/docs/airmini-protocol.md) for protocol research.
 - **AirSense 11 native features** — AirSense 11 has Bluetooth for direct data sync; explore if pycpap can leverage this.
 - **Philips DreamStation support** — Once pycpap supports Respironics, expose the same sensor set.
 - **F&P Icon support** — Same pattern if pycpap adds support.

@@ -4,6 +4,8 @@
   "version": "0.1.0",
   "config_flow": true,
   "documentation": "https://github.com/prestomation/ha-cpap-local",
+  "issue_tracker": "https://github.com/prestomation/ha-cpap-local/issues",
+  "homeassistant": "2023.3.0",
   "requirements": ["pycpap>=0.1.0"],
   "iot_class": "local_polling",
   "codeowners": ["@prestomation"]

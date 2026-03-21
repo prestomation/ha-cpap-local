@@ -1,4 +1,11 @@
 sync_now:
   name: Sync Now
   description: Immediately fetch the latest CPAP data from the device, bypassing the scheduled sync time.
-  fields: {}
+  fields:
+    entry_id:
+      name: Entry ID
+      description: "Optional: config entry ID to sync a specific device. Leave blank to sync all CPAP devices."
+      required: false
+      example: "abc123def456"
+      selector:
+        text:
