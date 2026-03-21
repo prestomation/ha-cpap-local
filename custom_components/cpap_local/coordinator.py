@@ -1,6 +1,7 @@
 """DataUpdateCoordinator for CPAP Local integration."""
 from __future__ import annotations
 
+import asyncio
 import logging
 from datetime import date, datetime, timedelta
 from typing import Any
@@ -9,6 +10,7 @@ from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.event import async_track_time_change
 from homeassistant.helpers.storage import Store
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
+from homeassistant.util import dt as dt_util
 
 from .const import (
     CONF_AHI_THRESHOLD,
@@ -108,16 +110,25 @@ class CPAPDataCoordinator(DataUpdateCoordinator):
         yesterday = date.today() - timedelta(days=1)
 
         try:
+            # TODO: Switch to reader.get_all_data() once pycpap>=0.2.0 is released
+            # Currently calls get_sessions() and get_device_info() separately (two fetches)
             sessions = await reader.get_sessions(since=yesterday)
             device_info = await reader.get_device_info()
-        except Exception as exc:
-            _LOGGER.warning("CPAP data fetch failed: %s", exc)
-            raise UpdateFailed(f"Failed to fetch CPAP data: {exc}") from exc
+        except asyncio.TimeoutError as exc:
+            _LOGGER.warning("CPAP data fetch timed out")
+            raise UpdateFailed("Timed out fetching CPAP data") from exc
+        except OSError as exc:
+            _LOGGER.warning("CPAP data fetch I/O error: %s", exc)
+            raise UpdateFailed(f"I/O error fetching CPAP data: {exc}") from exc
+        except Exception as exc:  # noqa: BLE001 — last-resort catch for unexpected errors
+            _LOGGER.exception("Unexpected error fetching CPAP data")
+            raise UpdateFailed(f"Unexpected error fetching CPAP data: {exc}") from exc
 
         latest_session = sessions[-1] if sessions else None
 
+        # Start with existing cached data so we can fall back to it if needed
         data: dict = {
-            "last_sync": datetime.now().isoformat(),
+            "last_successful_sync": dt_util.now().isoformat(),
             "device": {
                 "model": device_info.model,
                 "serial": device_info.serial,
@@ -128,10 +139,17 @@ class CPAPDataCoordinator(DataUpdateCoordinator):
         }
 
         if latest_session:
+            def _to_utc_iso(dt: datetime) -> str:
+                if dt.tzinfo is None:
+                    dt = dt.replace(tzinfo=dt_util.DEFAULT_TIME_ZONE)
+                return dt_util.as_utc(dt).isoformat()
+
+            # New session fetched — update last_sync
+            data["last_sync"] = dt_util.now().isoformat()
             data["session"] = {
                 "date": latest_session.date.isoformat(),
-                "session_start": latest_session.session_start.isoformat(),
-                "session_end": latest_session.session_end.isoformat(),
+                "session_start": _to_utc_iso(latest_session.session_start),
+                "session_end": _to_utc_iso(latest_session.session_end),
                 "duration_minutes": latest_session.duration_minutes,
                 "ahi": latest_session.ahi,
                 "apnea_index": latest_session.apnea_index,
@@ -144,7 +162,10 @@ class CPAPDataCoordinator(DataUpdateCoordinator):
             }
         elif self.data and "session" in self.data:
             # Preserve last known session if today's data isn't available yet
+            # last_sync is NOT updated here — no new device data was fetched
             data["session"] = self.data["session"]
+            if "last_sync" in self.data:
+                data["last_sync"] = self.data["last_sync"]
             _LOGGER.debug("CPAP Local: no new session today, using cached data")
 
         # Cache to persistent storage

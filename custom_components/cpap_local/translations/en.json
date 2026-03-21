@@ -26,7 +26,7 @@
       }
     },
     "error": {
-      "cannot_connect": "Cannot connect to the CPAP device. Check the URL or path and try again.",
+      "cannot_connect": "Could not reach the device. Make sure your CPAP is off and your device is connected to its WiFi network. Submit again to save anyway.",
       "invalid_path": "The specified path does not exist or is not readable."
     }
   },

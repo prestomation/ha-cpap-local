@@ -1,10 +1,14 @@
 """Config flow for CPAP Local integration."""
 from __future__ import annotations
 
+from pathlib import Path
+
+import aiohttp
 import voluptuous as vol
 from homeassistant import config_entries
 from homeassistant.core import callback
 from homeassistant.data_entry_flow import FlowResult
+from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
 from .const import (
     CONF_AHI_THRESHOLD,
@@ -58,6 +62,7 @@ class CPAPLocalConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
     def __init__(self) -> None:
         self._fetch_method: str | None = None
+        self._connection_warning_shown: bool = False
 
     async def async_step_user(self, user_input: dict | None = None) -> FlowResult:
         """Step 1: Choose fetch method."""
@@ -78,14 +83,31 @@ class CPAPLocalConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
         if user_input is not None:
             url = user_input[CONF_HTTP_URL].rstrip("/")
-            return self.async_create_entry(
-                title=f"CPAP ({url})",
-                data={
-                    CONF_FETCH_METHOD: FETCH_METHOD_HTTP,
-                    CONF_HTTP_URL: url,
-                    CONF_SYNC_HOUR: user_input.get(CONF_SYNC_HOUR, DEFAULT_SCAN_INTERVAL_HOUR),
-                },
-            )
+            connection_ok = False
+            try:
+                session = async_get_clientsession(self.hass)
+                async with session.get(
+                    f"{url}/dir?dir=A:",
+                    timeout=aiohttp.ClientTimeout(total=5),
+                ) as resp:
+                    connection_ok = resp.status < 400
+            except Exception:
+                connection_ok = False
+
+            if not connection_ok and not self._connection_warning_shown:
+                # First failure: warn the user but allow them to proceed by submitting again
+                self._connection_warning_shown = True
+                errors["base"] = "cannot_connect"
+            else:
+                # Either connected OK, or user acknowledged the warning and resubmitted
+                return self.async_create_entry(
+                    title=f"CPAP ({url})",
+                    data={
+                        CONF_FETCH_METHOD: FETCH_METHOD_HTTP,
+                        CONF_HTTP_URL: url,
+                        CONF_SYNC_HOUR: user_input.get(CONF_SYNC_HOUR, DEFAULT_SCAN_INTERVAL_HOUR),
+                    },
+                )
 
         return self.async_show_form(
             step_id="http",
@@ -98,15 +120,18 @@ class CPAPLocalConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         errors: dict[str, str] = {}
 
         if user_input is not None:
-            path = user_input[CONF_LOCAL_PATH]
-            return self.async_create_entry(
-                title=f"CPAP (local: {path})",
-                data={
-                    CONF_FETCH_METHOD: FETCH_METHOD_LOCAL,
-                    CONF_LOCAL_PATH: path,
-                    CONF_SYNC_HOUR: user_input.get(CONF_SYNC_HOUR, DEFAULT_SCAN_INTERVAL_HOUR),
-                },
-            )
+            path = Path(user_input[CONF_LOCAL_PATH])
+            if not path.exists() or not path.is_dir():
+                errors[CONF_LOCAL_PATH] = "invalid_path"
+            else:
+                return self.async_create_entry(
+                    title=f"CPAP (local: {path})",
+                    data={
+                        CONF_FETCH_METHOD: FETCH_METHOD_LOCAL,
+                        CONF_LOCAL_PATH: str(path),
+                        CONF_SYNC_HOUR: user_input.get(CONF_SYNC_HOUR, DEFAULT_SCAN_INTERVAL_HOUR),
+                    },
+                )
 
         return self.async_show_form(
             step_id="local",
