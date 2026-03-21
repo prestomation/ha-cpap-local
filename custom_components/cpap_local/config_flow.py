@@ -1,6 +1,7 @@
 """Config flow for CPAP Local integration."""
 from __future__ import annotations
 
+import logging
 from pathlib import Path
 
 import aiohttp
@@ -9,6 +10,8 @@ from homeassistant import config_entries
 from homeassistant.core import callback
 from homeassistant.data_entry_flow import FlowResult
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
+
+_LOGGER = logging.getLogger(__name__)
 
 from .const import (
     CONF_AHI_THRESHOLD,
@@ -95,7 +98,8 @@ class CPAPLocalConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     timeout=aiohttp.ClientTimeout(total=5),
                 ) as resp:
                     connection_ok = resp.status < 400
-            except Exception:
+            except Exception as exc:  # noqa: BLE001
+                _LOGGER.debug("CPAP connection check failed for %s: %s", url, exc)
                 connection_ok = False
 
             if not connection_ok and self._warned_url != url:

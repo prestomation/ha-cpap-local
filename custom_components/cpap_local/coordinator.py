@@ -121,7 +121,7 @@ class CPAPDataCoordinator(DataUpdateCoordinator):
             _LOGGER.warning("CPAP data fetch I/O error: %s", exc)
             raise UpdateFailed(f"I/O error fetching CPAP data: {exc}") from exc
         except Exception as exc:  # noqa: BLE001 — last-resort catch for unexpected errors
-            _LOGGER.exception("Unexpected error fetching CPAP data")
+            _LOGGER.debug("Unexpected error fetching CPAP data: %s", exc, exc_info=True)
             raise UpdateFailed(f"Unexpected error fetching CPAP data: {exc}") from exc
 
         latest_session = sessions[-1] if sessions else None
