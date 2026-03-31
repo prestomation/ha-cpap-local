@@ -4,7 +4,7 @@
   "version": "0.2.0",
   "config_flow": true,
   "documentation": "https://github.com/prestomation/ha-cpap-local",
-  "requirements": ["pycpap>=0.1.0"],
+  "requirements": ["pycpap>=0.2.0"],
   "iot_class": "local_polling",
   "codeowners": ["@prestomation"]
 }
