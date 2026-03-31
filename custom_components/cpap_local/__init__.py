@@ -9,18 +9,19 @@ from aiohttp import web
 
 from homeassistant.components.http import HomeAssistantView
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.core import HomeAssistant, ServiceCall, callback
+from homeassistant.core import HomeAssistant, ServiceCall
 from homeassistant.helpers import device_registry as dr
 
 from .const import (
     CONF_CPAP_ID,
     CONF_ESP_DEVICE_ID,
-    CONF_ESP_INGEST_TOKEN,
+    CONF_HTTP_URL,
     CONF_FETCH_METHOD,
     CONF_FETCH_METHOD_ESP,
-    CONF_HTTP_URL,
     DOMAIN,
     FETCH_METHOD_HTTP,
+    SCOPE_ALL_AVAILABLE,
+    SCOPE_LAST_7_DAYS,
     SCOPE_SUMMARY_ONLY,
 )
 from .coordinator import CPAPDataCoordinator
@@ -28,18 +29,19 @@ from .coordinator import CPAPDataCoordinator
 _LOGGER = logging.getLogger(__name__)
 
 PLATFORMS = ["sensor", "binary_sensor"]
-
-# Registered once per HA start, shared across all CPAP entries
-_INGEST_VIEW_REGISTERED = False
+_VALID_SCOPES = frozenset([SCOPE_SUMMARY_ONLY, SCOPE_LAST_7_DAYS, SCOPE_ALL_AVAILABLE])
 
 
 async def async_setup(hass: HomeAssistant, config: dict) -> bool:
-    """Register the ingest HTTP view and domain-level services once."""
-    global _INGEST_VIEW_REGISTERED
-    if not _INGEST_VIEW_REGISTERED:
+    """Register the ingest HTTP view and domain-level services (once per HA start)."""
+    hass.data.setdefault(DOMAIN, {})
+
+    # Guard: only register HTTP view and services once, even across config entry reloads
+    if not hass.data[DOMAIN].get("_setup_done"):
         hass.http.register_view(CPAPIngestView())
-        _INGEST_VIEW_REGISTERED = True
-    _register_services(hass)
+        _register_services(hass)
+        hass.data[DOMAIN]["_setup_done"] = True
+
     return True
 
 
@@ -137,12 +139,13 @@ class CPAPIngestView(HomeAssistantView):
                 status_code=HTTPStatus.SERVICE_UNAVAILABLE,
             )
 
-        # Validate bearer token (constant-time compare to prevent timing attacks)
-        expected_token = coordinator.ingest_token
+        # Validate bearer token (constant-time compare to prevent timing attacks).
+        # Use a fixed-length sentinel when no token is configured so
+        # hmac.compare_digest always receives two equal-length strings.
+        expected_token = coordinator.ingest_token or ""
         auth_header = request.headers.get("Authorization", "")
-        if not auth_header.startswith("Bearer ") or not hmac.compare_digest(
-            auth_header[len("Bearer "):], expected_token or ""
-        ):
+        provided_token = auth_header[len("Bearer "):] if auth_header.startswith("Bearer ") else ""
+        if not expected_token or not hmac.compare_digest(provided_token, expected_token):
             _LOGGER.warning("CPAP ingest: invalid token for cpap_id '%s'", cpap_id)
             return self.json(
                 {"status": "error", "message": "Unauthorized"},
@@ -150,6 +153,10 @@ class CPAPIngestView(HomeAssistantView):
             )
 
         scope = request.headers.get("X-CPAP-Scope", SCOPE_SUMMARY_ONLY)
+        if scope not in _VALID_SCOPES:
+            _LOGGER.warning("CPAP ingest: invalid scope '%s', using summary_only", scope)
+            scope = SCOPE_SUMMARY_ONLY
+
         edf_bytes = await request.read()
 
         if not edf_bytes:

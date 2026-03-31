@@ -5,7 +5,7 @@ import logging
 from datetime import date, datetime, timedelta
 from typing import Any
 
-from homeassistant.core import HomeAssistant, callback, ServiceRegistry
+from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.event import async_track_time_change
 from homeassistant.helpers.storage import Store
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
@@ -154,14 +154,14 @@ class CPAPDataCoordinator(DataUpdateCoordinator):
             A summary dict with sessions_found and ahi.
         """
         try:
-            from datetime import date as date_type
             from pycpap import ResMedReader
 
             since = None
-            if scope == "last_7_days":
-                since = date.today() - timedelta(days=7)
-            elif scope == "summary_only":
+            if scope == SCOPE_SUMMARY_ONLY:
                 since = date.today() - timedelta(days=1)
+            elif scope == "last_7_days":
+                since = date.today() - timedelta(days=7)
+            # "all_available" → since=None (no filter)
 
             sessions, _ = ResMedReader.from_bytes(edf_bytes, since=since)
         except Exception as exc:

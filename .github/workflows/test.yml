@@ -23,7 +23,7 @@ jobs:
 
       - name: Install dependencies
         run: |
-          pip install pytest pytest-homeassistant-custom-component pycpap
+          pip install pytest "pytest-homeassistant-custom-component<0.13.206" "pycpap @ git+https://github.com/prestomation/pycpap@main"
 
       - name: Run tests
         run: |
