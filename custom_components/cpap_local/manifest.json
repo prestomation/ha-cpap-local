@@ -1,7 +1,7 @@
 {
   "domain": "cpap_local",
   "name": "CPAP Local",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "config_flow": true,
   "documentation": "https://github.com/prestomation/ha-cpap-local",
   "requirements": ["pycpap>=0.1.0"],

@@ -1,4 +1,59 @@
+# Services exposed by the cpap_local integration.
+
 sync_now:
   name: Sync Now
-  description: Immediately fetch the latest CPAP data from the device, bypassing the scheduled sync time.
+  description: >
+    Immediately fetch the latest CPAP data from the device, bypassing the
+    scheduled sync time. Only available for HTTP and local mount modes.
   fields: {}
+
+fetch_esp:
+  name: Fetch via ESP WiFi Bridge
+  description: >
+    Trigger an ESPHome device to disconnect from the home network, connect
+    to the CPAP WiFi SD card adapter (EZShare), download the EDF file,
+    reconnect to home WiFi, and POST the data back to Home Assistant.
+  fields:
+    esp_device_id:
+      name: ESPHome Device
+      description: The ESPHome device that will perform the fetch.
+      selector:
+        device:
+          integration: esphome
+    cpap_id:
+      name: CPAP ID
+      description: >
+        Logical CPAP device ID (must match the CPAP ID configured in the
+        ESP YAML for this CPAP). Used to route data to the correct integration entry.
+      example: cpap_bedroom
+    scope:
+      name: Fetch Scope
+      description: How much data to fetch from the SD card.
+      default: summary_only
+      selector:
+        select:
+          options:
+            - summary_only
+            - last_7_days
+            - all_available
+
+fetch_http:
+  name: Fetch via HTTP
+  description: >
+    Fetch CPAP data directly from a WiFi SD card adapter over HTTP.
+    The adapter must be reachable on the home network.
+  fields:
+    http_url:
+      name: Adapter URL
+      description: Base URL of the WiFi SD card adapter.
+      example: http://192.168.4.1
+    scope:
+      name: Fetch Scope
+      description: How much data to fetch from the SD card.
+      default: summary_only
+      selector:
+        select:
+          options:
+            - summary_only
+            - last_7_days
+            - all_available
