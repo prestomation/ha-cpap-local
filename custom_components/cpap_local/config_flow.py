@@ -5,9 +5,13 @@ import voluptuous as vol
 from homeassistant import config_entries
 from homeassistant.core import callback
 from homeassistant.data_entry_flow import FlowResult
+from homeassistant.helpers import selector
 
 from .const import (
     CONF_AHI_THRESHOLD,
+    CONF_CPAP_ID,
+    CONF_ESP_DEVICE_ID,
+    CONF_ESP_INGEST_TOKEN,
     CONF_FETCH_METHOD,
     CONF_HTTP_URL,
     CONF_LOCAL_PATH,
@@ -22,12 +26,18 @@ from .const import (
     DOMAIN,
     FETCH_METHOD_HTTP,
     FETCH_METHOD_LOCAL,
+    SCOPE_ALL_AVAILABLE,
+    SCOPE_LAST_7_DAYS,
+    SCOPE_SUMMARY_ONLY,
+    CONF_FETCH_METHOD_ESP,
+    generate_ingest_token,
 )
+
 
 STEP_METHOD_SCHEMA = vol.Schema(
     {
         vol.Required(CONF_FETCH_METHOD, default=FETCH_METHOD_HTTP): vol.In(
-            [FETCH_METHOD_HTTP, FETCH_METHOD_LOCAL]
+            [FETCH_METHOD_HTTP, FETCH_METHOD_LOCAL, CONF_FETCH_METHOD_ESP]
         ),
     }
 )
@@ -50,11 +60,25 @@ STEP_LOCAL_SCHEMA = vol.Schema(
     }
 )
 
+STEP_ESP_SCHEMA = vol.Schema(
+    {
+        vol.Required(CONF_ESP_DEVICE_ID): selector.DeviceSelector(
+            {
+                "integration": "esphome",
+            }
+        ),
+        vol.Required(CONF_CPAP_ID): str,
+        vol.Optional(CONF_SYNC_HOUR, default=DEFAULT_SCAN_INTERVAL_HOUR): vol.All(
+            int, vol.Range(min=0, max=23)
+        ),
+    }
+)
+
 
 class CPAPLocalConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     """Handle the CPAP Local config flow."""
 
-    VERSION = 1
+    VERSION = 2  # Bumped for new ESP mode
 
     def __init__(self) -> None:
         self._fetch_method: str | None = None
@@ -65,6 +89,8 @@ class CPAPLocalConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             self._fetch_method = user_input[CONF_FETCH_METHOD]
             if self._fetch_method == FETCH_METHOD_HTTP:
                 return await self.async_step_http()
+            if self._fetch_method == CONF_FETCH_METHOD_ESP:
+                return await self.async_step_esp()
             return await self.async_step_local()
 
         return self.async_show_form(
@@ -74,8 +100,6 @@ class CPAPLocalConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
     async def async_step_http(self, user_input: dict | None = None) -> FlowResult:
         """Step 2a: Configure HTTP fetch."""
-        errors: dict[str, str] = {}
-
         if user_input is not None:
             url = user_input[CONF_HTTP_URL].rstrip("/")
             return self.async_create_entry(
@@ -90,20 +114,16 @@ class CPAPLocalConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         return self.async_show_form(
             step_id="http",
             data_schema=STEP_HTTP_SCHEMA,
-            errors=errors,
         )
 
     async def async_step_local(self, user_input: dict | None = None) -> FlowResult:
         """Step 2b: Configure local path fetch."""
-        errors: dict[str, str] = {}
-
         if user_input is not None:
-            path = user_input[CONF_LOCAL_PATH]
             return self.async_create_entry(
-                title=f"CPAP (local: {path})",
+                title=f"CPAP (local: {user_input[CONF_LOCAL_PATH]})",
                 data={
                     CONF_FETCH_METHOD: FETCH_METHOD_LOCAL,
-                    CONF_LOCAL_PATH: path,
+                    CONF_LOCAL_PATH: user_input[CONF_LOCAL_PATH],
                     CONF_SYNC_HOUR: user_input.get(CONF_SYNC_HOUR, DEFAULT_SCAN_INTERVAL_HOUR),
                 },
             )
@@ -111,12 +131,35 @@ class CPAPLocalConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         return self.async_show_form(
             step_id="local",
             data_schema=STEP_LOCAL_SCHEMA,
-            errors=errors,
+        )
+
+    async def async_step_esp(self, user_input: dict | None = None) -> FlowResult:
+        """Step 2c: Configure ESP WiFi-bridge fetch."""
+        if user_input is not None:
+            cpap_id = user_input[CONF_CPAP_ID].strip()
+            esp_device_id = user_input[CONF_ESP_DEVICE_ID]
+            ingest_token = generate_ingest_token()
+            return self.async_create_entry(
+                title=f"CPAP ({cpap_id})",
+                data={
+                    CONF_FETCH_METHOD: CONF_FETCH_METHOD_ESP,
+                    CONF_ESP_DEVICE_ID: esp_device_id,
+                    CONF_CPAP_ID: cpap_id,
+                    CONF_ESP_INGEST_TOKEN: ingest_token,
+                    CONF_SYNC_HOUR: user_input.get(CONF_SYNC_HOUR, DEFAULT_SCAN_INTERVAL_HOUR),
+                },
+            )
+
+        return self.async_show_form(
+            step_id="esp",
+            data_schema=STEP_ESP_SCHEMA,
         )
 
     @staticmethod
     @callback
-    def async_get_options_flow(config_entry: config_entries.ConfigEntry) -> "CPAPLocalOptionsFlow":
+    def async_get_options_flow(
+        config_entry: config_entries.ConfigEntry,
+    ) -> "CPAPLocalOptionsFlow":
         return CPAPLocalOptionsFlow(config_entry)
 
 
@@ -153,8 +196,8 @@ class CPAPLocalOptionsFlow(config_entries.OptionsFlow):
                 ): str,
                 vol.Optional(
                     CONF_RAW_SYNC_SCOPE,
-                    default=current.get(CONF_RAW_SYNC_SCOPE, "last_7_days"),
-                ): vol.In(["summary_only", "last_7_days", "all_available"]),
+                    default=current.get(CONF_RAW_SYNC_SCOPE, SCOPE_SUMMARY_ONLY),
+                ): vol.In([SCOPE_SUMMARY_ONLY, SCOPE_LAST_7_DAYS, SCOPE_ALL_AVAILABLE]),
             }
         )
 

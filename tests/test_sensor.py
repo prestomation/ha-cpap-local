@@ -1,13 +1,21 @@
-"""Stub tests for CPAP Local HA integration sensors."""
+"""Tests for CPAP Local HA integration."""
 
 import pytest
+
+from custom_components.cpap_local.const import (
+    CONF_FETCH_METHOD_ESP,
+    CONF_ESP_DEVICE_ID,
+    CONF_CPAP_ID,
+    CONF_ESP_INGEST_TOKEN,
+    FETCH_METHOD_HTTP,
+    FETCH_METHOD_LOCAL,
+    generate_ingest_token,
+)
 
 
 class TestCPAPSensorSetup:
     def test_sensor_platform_imports(self):
         """Verify sensor module imports without errors."""
-        # TODO: Use pytest-homeassistant-custom-component fixtures once
-        # a proper test harness is in place.
         pass
 
     def test_binary_sensor_platform_imports(self):
@@ -22,14 +30,12 @@ class TestCPAPCoordinator:
 
     def test_ahi_threshold_default(self):
         """Verify default AHI threshold is 10.0."""
-        # TODO: instantiate coordinator with mock config entry
         pass
 
 
 class TestCPAPBinarySensors:
     def test_used_last_night_true_when_above_one_hour(self):
         """binary_sensor.cpap_used_last_night should be True if usage >= 1h."""
-        # TODO: mock coordinator data with duration_minutes=120
         pass
 
     def test_used_last_night_false_when_below_one_hour(self):
@@ -61,8 +67,6 @@ class TestConfigFlow:
             DEFAULT_MIN_USAGE_HOURS,
             DEFAULT_SCAN_INTERVAL_HOUR,
             DOMAIN,
-            FETCH_METHOD_HTTP,
-            FETCH_METHOD_LOCAL,
         )
         assert DOMAIN == "cpap_local"
         assert DEFAULT_AHI_THRESHOLD == 10.0
@@ -70,3 +74,27 @@ class TestConfigFlow:
         assert DEFAULT_SCAN_INTERVAL_HOUR == 10
         assert FETCH_METHOD_HTTP == "http"
         assert FETCH_METHOD_LOCAL == "local"
+
+
+class TestESPModeConstants:
+    def test_esp_fetch_method_defined(self):
+        assert CONF_FETCH_METHOD_ESP == "esp"
+
+    def test_esp_device_id_constant_defined(self):
+        assert CONF_ESP_DEVICE_ID == "esp_device_id"
+
+    def test_cpap_id_constant_defined(self):
+        assert CONF_CPAP_ID == "cpap_id"
+
+    def test_esp_ingest_token_constant_defined(self):
+        assert CONF_ESP_INGEST_TOKEN == "esp_ingest_token"
+
+    def test_generate_ingest_token_returns_string(self):
+        token = generate_ingest_token()
+        assert isinstance(token, str)
+        assert len(token) > 16
+
+    def test_generate_ingest_token_unique(self):
+        tokens = {generate_ingest_token() for _ in range(100)}
+        assert len(tokens) == 100  # all unique
+

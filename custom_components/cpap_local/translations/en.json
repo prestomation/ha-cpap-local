@@ -6,6 +6,13 @@
         "description": "Choose how to connect to your CPAP device's SD card.",
         "data": {
           "fetch_method": "Connection Method"
+        },
+        "data_description": {
+          "fetch_method": {
+            "http": "WiFi SD Card (EZShare or similar) — direct HTTP from the adapter",
+            "local": "Locally mounted SD card or network share path",
+            "esp": "ESP WiFi Bridge — an ESP32 that switches networks to pull data from the adapter"
+          }
         }
       },
       "http": {
@@ -22,6 +29,19 @@
         "data": {
           "local_path": "SD Card Mount Path",
           "sync_hour": "Daily Sync Hour (0-23)"
+        }
+      },
+      "esp": {
+        "title": "ESP WiFi Bridge",
+        "description": "Configure an ESPHome device to bridge Home Assistant to the WiFi SD card adapter. The ESP will switch networks once a day to download data, then reconnect and POST it here.",
+        "data": {
+          "esp_device_id": "ESPHOME Device",
+          "cpap_id": "CPAP ID",
+          "sync_hour": "Daily Sync Hour (0-23)"
+        },
+        "data_description": {
+          "esp_device_id": "The ESPHome device configured with the WiFi bridge firmware.",
+          "cpap_id": "A short logical name for this CPAP (e.g. bedroom_cpap). Must match the cpap_id configured in the ESP YAML. Used to route incoming data to the right integration entry."
         }
       }
     },
@@ -42,6 +62,20 @@
           "raw_sync_scope": "DATALOG Sync Scope"
         }
       }
+    }
+  },
+  "services": {
+    "sync_now": {
+      "name": "Sync Now",
+      "description": "Immediately fetch the latest CPAP data, bypassing the scheduled sync time."
+    },
+    "fetch_esp": {
+      "name": "Fetch via ESP WiFi Bridge",
+      "description": "Trigger an ESP to fetch CPAP data from the WiFi SD card adapter."
+    },
+    "fetch_http": {
+      "name": "Fetch via HTTP",
+      "description": "Fetch CPAP data directly from a WiFi SD card adapter over HTTP."
     }
   }
 }
